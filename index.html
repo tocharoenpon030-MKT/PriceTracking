@@ -7,17 +7,17 @@
 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #0d0f14;
-    --surface: #161920;
-    --border: #252830;
-    --up: #ff4d6d;
-    --up-soft: rgba(255,77,109,0.1);
-    --down: #00c896;
-    --down-soft: rgba(0,200,150,0.1);
-    --neutral: #8892a4;
-    --text: #e8ecf4;
-    --text-dim: #555d6e;
-    --accent: #f0b429;
+    --bg: #ffffff;
+    --surface: #f8f9fa;
+    --border: #e2e5e9;
+    --up: #dc2626;
+    --up-soft: rgba(220,38,38,0.08);
+    --down: #16a34a;
+    --down-soft: rgba(22,163,74,0.08);
+    --neutral: #6b7280;
+    --text: #111827;
+    --text-dim: #9ca3af;
+    --accent: #e07b1e;
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -34,7 +34,7 @@
   body::before {
     content: '';
     position: fixed; inset: 0;
-    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.035'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.015'/%3E%3C/svg%3E");
     pointer-events: none; z-index: 0;
   }
 
@@ -73,7 +73,7 @@
     border-radius: 10px; padding: 16px 18px;
     transition: border-color .2s;
   }
-  .stat:hover { border-color: #353a47; }
+  .stat:hover { border-color: #c5c9d0; }
   .stat .num {
     font-family: 'IBM Plex Mono', monospace;
     font-size: 28px; font-weight: 600; line-height: 1;
@@ -94,8 +94,8 @@
     background: transparent; color: var(--neutral);
     cursor: pointer; transition: all .15s;
   }
-  .filter-btn:hover { border-color: #353a47; color: var(--text); }
-  .filter-btn.active { background: var(--text); color: var(--bg); border-color: var(--text); font-weight: 600; }
+  .filter-btn:hover { border-color: #aab0bb; color: var(--text); }
+  .filter-btn.active { background: var(--text); color: #fff; border-color: var(--text); font-weight: 600; }
   .filter-btn.up.active { background: var(--up); color: #fff; border-color: var(--up); }
   .filter-btn.down.active { background: var(--down); color: #000; border-color: var(--down); }
 
@@ -115,6 +115,7 @@
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 12px; overflow: hidden;
+    box-shadow: 0 1px 8px rgba(0,0,0,0.06);
   }
   table { width: 100%; border-collapse: collapse; font-size: 14px; }
   thead tr { border-bottom: 1px solid var(--border); }
@@ -130,13 +131,13 @@
     transition: background .12s;
   }
   tbody tr:last-child { border-bottom: none; }
-  tbody tr:hover { background: rgba(255,255,255,0.02); }
+  tbody tr:hover { background: rgba(0,0,0,0.02); }
   td { padding: 13px 16px; vertical-align: middle; }
   td.right { text-align: right; }
 
   .group-tag {
     font-size: 11px; color: var(--neutral);
-    background: rgba(255,255,255,0.05);
+    background: rgba(0,0,0,0.05);
     padding: 2px 8px; border-radius: 4px;
     font-family: 'IBM Plex Mono', monospace;
   }
@@ -170,7 +171,7 @@
   /* modal */
   .modal-bg {
     display: none; position: fixed; inset: 0;
-    background: rgba(0,0,0,.7); backdrop-filter: blur(4px);
+    background: rgba(0,0,0,.4); backdrop-filter: blur(4px);
     z-index: 100; align-items: center; justify-content: center;
   }
   .modal-bg.show { display: flex; }
@@ -191,7 +192,7 @@
     font-size: 20px; cursor: pointer; line-height: 1;
     padding: 4px 8px; border-radius: 6px; transition: all .15s;
   }
-  .close-btn:hover { background: var(--border); color: var(--text); }
+  .close-btn:hover { background: var(--surface); color: var(--text); }
   .modal table { font-size: 13px; }
   .modal thead th { padding: 8px 12px; }
   .modal td { padding: 9px 12px; }
