@@ -267,7 +267,7 @@
 //  CONFIG — แก้ค่าตรงนี้
 // ============================================================
 const SHEET_ID    = "1qo1zcJkR6jG5OkbvNdx5bxIPpcfFsshd1RvlctjaFPc";
-const SHEET_NAME  = "เช็คราคาขาย";
+const SHEET_NAME  = "เช็คราคาขาย7-2569";
 const DATA_START_ROW = 3;   // row เริ่มต้นข้อมูล (1-based)
 const DATE_ROW    = 2;      // row วันที่ (1-based)
 const FIRST_DATE_COL = 6;   // col เริ่มวันที่ (1-based)
@@ -283,7 +283,7 @@ let currentFilter = 'all';
 // ── Fetch Sheet via CSV export (CORS-safe, ไม่ต้อง API key) ───
 async function fetchSheet() {
   // ใช้ GID 1457383902 ตามลิงก์ที่แชร์มา
-  const GID = "1457383902";
+  const GID = "2078843511";
   const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${GID}`;
   const res  = await fetch(url);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
