@@ -225,7 +225,10 @@
       <h1>📊 Price Tracker</h1>
       <div class="sub" id="sub-text">กำลังโหลด...</div>
     </div>
-    <div class="date-badge" id="date-badge">—</div>
+    <div style="display:flex; flex-direction:column; align-items:flex-end; gap:8px;">
+      <div class="date-badge" id="date-badge">—</div>
+      <button class="btn-data" style="margin-left:0;" onclick="window.open('https://docs.google.com/spreadsheets/d/1qo1zcJkR6jG5OkbvNdx5bxIPpcfFsshd1RvlctjaFPc/edit#gid=1457383902','_blank')">📋 ดู DATA ทั้งหมด</button>
+    </div>
   </header>
 
   <div class="stats">
@@ -264,7 +267,6 @@
     <button class="filter-btn active" onclick="setFilter('all',this)">ทั้งหมด</button>
     <button class="filter-btn up" onclick="setFilter('up',this)">🔺 ขึ้นราคา</button>
     <button class="filter-btn down" onclick="setFilter('down',this)">🔻 ลดราคา</button>
-   <button class="btn-data" onclick="window.open('https://docs.google.com/spreadsheets/d/1qo1zcJkR6jG5OkbvNdx5bxIPpcfFsshd1RvlctjaFPc/edit#gid=1457383902','_blank')">📋 ดู DATA ทั้งหมด</button>
   </div>
 
   <div class="table-wrap">
