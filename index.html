@@ -83,6 +83,15 @@
   .stat.down .num { color: var(--down); }
   .stat.total .num { color: var(--text); }
 
+  /* section headings */
+  .section-head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin: 40px 0 16px;
+  }
+  .section-head h2 {
+    font-size: 16px; font-weight: 700; display: flex; align-items: center; gap: 8px;
+  }
+
   /* filter bar */
   .filter-bar {
     display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap;
@@ -151,6 +160,7 @@
   }
   .badge.up { background: var(--up-soft); color: var(--up); }
   .badge.down { background: var(--down-soft); color: var(--down); }
+  .badge.same { background: rgba(107,114,128,0.08); color: var(--neutral); }
 
   /* loading / empty / error states */
   .state-box {
@@ -233,6 +243,23 @@
     </div>
   </div>
 
+  <!-- ⛽ Oil price section -->
+  <div class="section-head">
+    <h2>⛽ ราคาน้ำมันวันนี้</h2>
+    <div class="date-badge" id="oil-date-badge">—</div>
+  </div>
+  <div class="table-wrap" style="margin-bottom: 8px;">
+    <div class="state-box" id="oil-loading">
+      <div class="spinner"></div>
+      <span>กำลังดึงราคาน้ำมัน...</span>
+    </div>
+    <div id="oil-container" style="display:none;"></div>
+  </div>
+
+  <div class="section-head">
+    <h2>🛒 รายการราคาสินค้าที่เปลี่ยนวันนี้</h2>
+  </div>
+
   <div class="filter-bar">
     <button class="filter-btn active" onclick="setFilter('all',this)">ทั้งหมด</button>
     <button class="filter-btn up" onclick="setFilter('up',this)">🔺 ขึ้นราคา</button>
@@ -248,7 +275,7 @@
     <div id="table-container" style="display:none;"></div>
   </div>
 
-  <footer id="footer-text">Price Tracker v4 · ข้อมูลจาก Google Sheets</footer>
+  <footer id="footer-text">Price Tracker v5 · ข้อมูลจาก Google Sheets</footer>
 </div>
 
 <!-- Modal: ดู DATA ทั้งหมด -->
@@ -274,6 +301,13 @@ const FIRST_DATE_COL = 6;   // col เริ่มวันที่ (1-based)
 const COL_URL     = 5;
 const COL_NAME    = 3;
 const COL_GROUP   = 1;
+
+// แท็บราคาน้ำมัน — โครงสร้าง: A1="น้ำมัน", B1=วันที่, A2:A10=ชื่อ, B2:B10=ราคา (มีคอลัมน์เดียว จึงต้องเก็บค่าเมื่อวานเองผ่าน storage)
+const OIL_GID          = "506035330";
+const OIL_DATE_ROW     = 1; // 1-based
+const OIL_DATA_START_ROW = 2; // 1-based
+const OIL_COL_NAME     = 1; // A
+const OIL_COL_PRICE    = 2; // B
 // ============================================================
 
 let allChanges = [];
@@ -281,14 +315,18 @@ let allRows    = [];
 let currentFilter = 'all';
 
 // ── Fetch Sheet via CSV export (CORS-safe, ไม่ต้อง API key) ───
-async function fetchSheet() {
-  // ใช้ GID 1457383902 ตามลิงก์ที่แชร์มา
-  const GID = "2078843511";
-  const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${GID}`;
+async function fetchSheetByGid(gid) {
+  const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${gid}`;
   const res  = await fetch(url);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const text = await res.text();
   return parseCSV(text);
+}
+
+async function fetchSheet() {
+  // ใช้ GID 1457383902 ตามลิงก์ที่แชร์มา
+  const GID = "2078843511";
+  return fetchSheetByGid(GID);
 }
 
 // ── CSV parser รองรับ field ที่มี comma และ quote ─────────────
@@ -514,7 +552,136 @@ function openModal()  { document.getElementById("modal-bg").classList.add("show"
 function closeModalDirect() { document.getElementById("modal-bg").classList.remove("show"); }
 function closeModal(e) { if (e.target === document.getElementById("modal-bg")) closeModalDirect(); }
 
+// ============================================================
+//  ⛽ ราคาน้ำมัน — แท็บนี้มีแค่คอลัมน์เดียว (ราคาล่าสุด) เลยต้อง
+//  จำค่าของเมื่อวานเองด้วย window.storage แล้วเทียบทุกครั้งที่โหลด
+// ============================================================
+
+function parseThaiDateKey(str) {
+  // "15/7/2569" -> "2569-07-15" (ใช้เป็น key เทียบวันที่)
+  str = String(str || "").trim();
+  const p = str.split(/[\/\-]/);
+  if (p.length < 3) return str;
+  const dd = p[0].padStart(2, "0");
+  const mm = p[1].padStart(2, "0");
+  return `${p[2]}-${mm}-${dd}`;
+}
+
+async function loadOil() {
+  try {
+    const rows = await fetchSheetByGid(OIL_GID);
+
+    const dateRow = rows[OIL_DATE_ROW - 1] || [];
+    const dateStr = String(dateRow[OIL_COL_PRICE - 1] || "").trim();
+    const dateKey = parseThaiDateKey(dateStr) || todayStr();
+
+    const oilToday = [];
+    for (let r = OIL_DATA_START_ROW - 1; r < rows.length; r++) {
+      const row = rows[r];
+      if (!row) continue;
+      const name = String(row[OIL_COL_NAME - 1] || "").trim();
+      if (!name) continue;
+      const price = toNum(row[OIL_COL_PRICE - 1]);
+      if (price === null) continue;
+      oilToday.push({ name, price });
+    }
+
+    // โหลดประวัติราคาที่เคยบันทึกไว้ (ข้อมูล shared เพื่อให้ทุกคนที่เปิดหน้านี้เห็นค่าตรงกัน)
+    let history = [];
+    try {
+      const stored = await window.storage.get('oil-price-history', true);
+      if (stored && stored.value) history = JSON.parse(stored.value);
+    } catch (e) {
+      history = []; // ยังไม่เคยมีข้อมูล
+    }
+
+    // หา entry ล่าสุดที่ "วันที่ไม่ตรงกับวันนี้" มาใช้เป็นราคาเมื่อวาน
+    let prevEntry = null;
+    for (let i = history.length - 1; i >= 0; i--) {
+      if (history[i].date !== dateKey) { prevEntry = history[i]; break; }
+    }
+    const prevMap = {};
+    if (prevEntry) {
+      for (const item of prevEntry.prices) prevMap[item.name] = item.price;
+    }
+
+    const oilChanges = oilToday.map(item => {
+      const hasPrev = Object.prototype.hasOwnProperty.call(prevMap, item.name);
+      const prevPrice = hasPrev ? prevMap[item.name] : null;
+      let diff = null, pct = null, direction = null;
+      if (hasPrev && prevPrice !== item.price) {
+        diff = item.price - prevPrice;
+        pct = ((diff / prevPrice) * 100).toFixed(1);
+        direction = diff > 0 ? "up" : "down";
+      } else if (hasPrev) {
+        direction = "same";
+      }
+      return { ...item, prevPrice, diff, pct, direction };
+    });
+
+    // บันทึกราคาวันนี้เก็บไว้เป็นฐานสำหรับเทียบวันถัดไป
+    const existingIdx = history.findIndex(h => h.date === dateKey);
+    if (existingIdx >= 0) history[existingIdx] = { date: dateKey, prices: oilToday };
+    else history.push({ date: dateKey, prices: oilToday });
+    if (history.length > 5) history = history.slice(history.length - 5);
+
+    try {
+      await window.storage.set('oil-price-history', JSON.stringify(history), true);
+    } catch (e) {
+      console.error("save oil history failed", e);
+    }
+
+    renderOil(oilChanges, dateStr);
+  } catch (e) {
+    console.error(e);
+    document.getElementById("oil-loading").innerHTML = `
+      <div class="ico">⚠️</div>
+      <span>โหลดราคาน้ำมันไม่ได้: ${e.message}</span>
+      <span style="font-size:12px;color:var(--text-dim)">ตรวจสอบว่าแท็บ "ราคาน้ำมัน" เปิด Public แล้ว</span>`;
+  }
+}
+
+function renderOil(list, dateStr) {
+  document.getElementById("oil-loading").style.display = "none";
+  const container = document.getElementById("oil-container");
+  container.style.display = "block";
+  document.getElementById("oil-date-badge").textContent = dateStr ? "วันที่ " + dateStr : todayStr();
+
+  if (list.length === 0) {
+    container.innerHTML = `<div class="state-box">
+      <div class="ico">—</div>
+      <span>ยังไม่มีข้อมูลราคาน้ำมัน</span>
+    </div>`;
+    return;
+  }
+
+  let html = `<table>
+    <thead><tr>
+      <th>ชนิดน้ำมัน</th>
+      <th class="right">ราคาวันนี้</th>
+      <th class="right">เปลี่ยนจากเมื่อวาน</th>
+    </tr></thead><tbody>`;
+
+  for (const o of list) {
+    let changeHtml = `<span style="color:var(--text-dim);font-size:12px">— ไม่มีข้อมูลเมื่อวาน</span>`;
+    if (o.direction === "up" || o.direction === "down") {
+      const sign = o.direction === "up" ? "+" : "−";
+      changeHtml = `<span class="badge ${o.direction}">${sign}${Math.abs(o.diff).toFixed(2)} ฿ (${sign}${Math.abs(o.pct)}%)</span>`;
+    } else if (o.direction === "same") {
+      changeHtml = `<span class="badge same">ไม่เปลี่ยนแปลง</span>`;
+    }
+    html += `<tr>
+      <td><span class="prod-name">${o.name}</span></td>
+      <td class="right price-mono" style="font-weight:600">${fmt(o.price)}</td>
+      <td class="right">${changeHtml}</td>
+    </tr>`;
+  }
+  html += "</tbody></table>";
+  container.innerHTML = html;
+}
+
 load();
+loadOil();
 </script>
 </body>
 </html>
