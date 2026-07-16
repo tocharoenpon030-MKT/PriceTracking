@@ -300,16 +300,17 @@ const SHEET_NAME  = "เช็คราคาขาย7-2569";
 const DATA_START_ROW = 3;   // row เริ่มต้นข้อมูล (1-based)
 const DATE_ROW    = 2;      // row วันที่ (1-based)
 const FIRST_DATE_COL = 6;   // col เริ่มวันที่ (1-based)
-const COL_URL     = 5;
+const COL_URL     = 4;
 const COL_NAME    = 3;
 const COL_GROUP   = 1;
 
-// แท็บราคาน้ำมัน — โครงสร้าง: A1="น้ำมัน", B1=วันที่, A2:A10=ชื่อ, B2:B10=ราคา (มีคอลัมน์เดียว จึงต้องเก็บค่าเมื่อวานเองผ่าน storage)
-const OIL_GID          = "506035330";
-const OIL_DATE_ROW     = 1; // 1-based
-const OIL_DATA_START_ROW = 2; // 1-based
-const OIL_COL_NAME     = 1; // A
-const OIL_COL_PRICE    = 2; // B
+// แท็บราคาน้ำมัน — โครงสร้างเหมือนตารางราคาสินค้า: แถว 2 = หัวตาราง (ชื่อน้ำมัน / วันที่ไล่ไปทางขวา)
+// คอลัมน์ A = ชื่อน้ำมัน, คอลัมน์ B เป็นต้นไป = ราคาตามวันที่ (ตรงกับ Apps Script ที่ตั้งไว้)
+const OIL_GID           = "506035330";
+const OIL_HEADER_ROW    = 2;  // 1-based — แถวที่มีคำว่า "ชื่อน้ำมัน" และวันที่
+const OIL_DATA_START_ROW = 3; // 1-based — แถวแรกที่เป็นข้อมูลน้ำมันจริง
+const OIL_COL_NAME      = 1;  // คอลัมน์ A
+const OIL_FIRST_DATE_COL = 2; // คอลัมน์ B เป็นต้นไป
 // ============================================================
 
 let allChanges = [];
@@ -326,7 +327,7 @@ async function fetchSheetByGid(gid) {
 }
 
 async function fetchSheet() {
-  // ใช้ GID 1457383902 ตามลิงก์ที่แชร์มา
+  // ใช้ GID 2078843511 ตามลิงก์ที่แชร์มา (แท็บราคาสินค้า)
   const GID = "2078843511";
   return fetchSheetByGid(GID);
 }
@@ -370,19 +371,19 @@ function todayStr() {
   return d.getDate() + "/" + (d.getMonth()+1) + "/" + (d.getFullYear()+543);
 }
 
-function findTodayColIndex(rows) {
-  const dateRowIdx = DATE_ROW - 1;
+// หาคอลัมน์ index (0-based) ของ "วันนี้" ในแถวหัวตารางที่กำหนด
+// headerRowIdx0 = index ของแถวหัวตาราง (0-based), firstDateCol1 = คอลัมน์แรกที่เป็นวันที่ (1-based)
+function findTodayColIndexGeneric(rows, headerRowIdx0, firstDateCol1) {
   const today = new Date();
   const day = today.getDate(), month = today.getMonth()+1;
   const yearCE = today.getFullYear(), yearBE = yearCE + 543;
 
-  const row = rows[dateRowIdx];
+  const row = rows[headerRowIdx0];
   if (!row) return -1;
 
-  for (let c = FIRST_DATE_COL - 1; c < row.length; c++) {
+  for (let c = firstDateCol1 - 1; c < row.length; c++) {
     const str = String(row[c] || "").trim();
     if (!str) continue;
-    // รองรับ "2/6/2569", "2/6/2026", "02/06/2569"
     if (str.includes("/")) {
       const p = str.split("/");
       if (p.length >= 2) {
@@ -393,7 +394,6 @@ function findTodayColIndex(rows) {
         }
       }
     }
-    // รองรับ "2-6-2569"
     if (str.includes("-")) {
       const p = str.split("-");
       if (p.length >= 2) {
@@ -403,6 +403,10 @@ function findTodayColIndex(rows) {
     }
   }
   return -1;
+}
+
+function findTodayColIndex(rows) {
+  return findTodayColIndexGeneric(rows, DATE_ROW - 1, FIRST_DATE_COL);
 }
 
 async function load() {
@@ -555,82 +559,41 @@ function closeModalDirect() { document.getElementById("modal-bg").classList.remo
 function closeModal(e) { if (e.target === document.getElementById("modal-bg")) closeModalDirect(); }
 
 // ============================================================
-//  ⛽ ราคาน้ำมัน — แท็บนี้มีแค่คอลัมน์เดียว (ราคาล่าสุด) เลยต้อง
-//  จำค่าของเมื่อวานเองด้วย window.storage แล้วเทียบทุกครั้งที่โหลด
+//  ⛽ ราคาน้ำมัน — โครงสร้างเหมือนตารางราคาสินค้า (คอลัมน์ตามวันที่)
+//  อ่านคอลัมน์ "วันนี้" กับ "เมื่อวาน" ตรงจากชีตเลย ไม่ต้องเก็บ history เอง
 // ============================================================
-
-function parseThaiDateKey(str) {
-  // "15/7/2569" -> "2569-07-15" (ใช้เป็น key เทียบวันที่)
-  str = String(str || "").trim();
-  const p = str.split(/[\/\-]/);
-  if (p.length < 3) return str;
-  const dd = p[0].padStart(2, "0");
-  const mm = p[1].padStart(2, "0");
-  return `${p[2]}-${mm}-${dd}`;
-}
-
 async function loadOil() {
   try {
     const rows = await fetchSheetByGid(OIL_GID);
 
-    const dateRow = rows[OIL_DATE_ROW - 1] || [];
-    const dateStr = String(dateRow[OIL_COL_PRICE - 1] || "").trim();
-    const dateKey = parseThaiDateKey(dateStr) || todayStr();
+    const todayColIdx = findTodayColIndexGeneric(rows, OIL_HEADER_ROW - 1, OIL_FIRST_DATE_COL);
+    const prevColIdx  = todayColIdx > (OIL_FIRST_DATE_COL - 1) ? todayColIdx - 1 : -1;
 
-    const oilToday = [];
+    const headerRow = rows[OIL_HEADER_ROW - 1] || [];
+    const dateStr = todayColIdx >= 0 ? String(headerRow[todayColIdx] || "").trim() : "";
+
+    const oilChanges = [];
     for (let r = OIL_DATA_START_ROW - 1; r < rows.length; r++) {
       const row = rows[r];
       if (!row) continue;
       const name = String(row[OIL_COL_NAME - 1] || "").trim();
       if (!name) continue;
-      const price = toNum(row[OIL_COL_PRICE - 1]);
+
+      const price     = todayColIdx >= 0 ? toNum(row[todayColIdx]) : null;
+      const prevPrice = prevColIdx  >= 0 ? toNum(row[prevColIdx])  : null;
       if (price === null) continue;
-      oilToday.push({ name, price });
-    }
 
-    // โหลดประวัติราคาที่เคยบันทึกไว้ (ข้อมูล shared เพื่อให้ทุกคนที่เปิดหน้านี้เห็นค่าตรงกัน)
-    let history = [];
-    try {
-      const stored = await window.storage.get('oil-price-history', true);
-      if (stored && stored.value) history = JSON.parse(stored.value);
-    } catch (e) {
-      history = []; // ยังไม่เคยมีข้อมูล
-    }
-
-    // หา entry ล่าสุดที่ "วันที่ไม่ตรงกับวันนี้" มาใช้เป็นราคาเมื่อวาน
-    let prevEntry = null;
-    for (let i = history.length - 1; i >= 0; i--) {
-      if (history[i].date !== dateKey) { prevEntry = history[i]; break; }
-    }
-    const prevMap = {};
-    if (prevEntry) {
-      for (const item of prevEntry.prices) prevMap[item.name] = item.price;
-    }
-
-    const oilChanges = oilToday.map(item => {
-      const hasPrev = Object.prototype.hasOwnProperty.call(prevMap, item.name);
-      const prevPrice = hasPrev ? prevMap[item.name] : null;
       let diff = null, pct = null, direction = null;
-      if (hasPrev && prevPrice !== item.price) {
-        diff = item.price - prevPrice;
-        pct = ((diff / prevPrice) * 100).toFixed(1);
-        direction = diff > 0 ? "up" : "down";
-      } else if (hasPrev) {
-        direction = "same";
+      if (prevPrice !== null) {
+        if (price !== prevPrice) {
+          diff = price - prevPrice;
+          pct  = ((diff / prevPrice) * 100).toFixed(1);
+          direction = diff > 0 ? "up" : "down";
+        } else {
+          direction = "same";
+        }
       }
-      return { ...item, prevPrice, diff, pct, direction };
-    });
-
-    // บันทึกราคาวันนี้เก็บไว้เป็นฐานสำหรับเทียบวันถัดไป
-    const existingIdx = history.findIndex(h => h.date === dateKey);
-    if (existingIdx >= 0) history[existingIdx] = { date: dateKey, prices: oilToday };
-    else history.push({ date: dateKey, prices: oilToday });
-    if (history.length > 5) history = history.slice(history.length - 5);
-
-    try {
-      await window.storage.set('oil-price-history', JSON.stringify(history), true);
-    } catch (e) {
-      console.error("save oil history failed", e);
+      oilChanges.push({ name, price, prevPrice, diff, pct, direction });
     }
 
     renderOil(oilChanges, dateStr);
@@ -652,7 +615,7 @@ function renderOil(list, dateStr) {
   if (list.length === 0) {
     container.innerHTML = `<div class="state-box">
       <div class="ico">—</div>
-      <span>ยังไม่มีข้อมูลราคาน้ำมัน</span>
+      <span>ยังไม่มีข้อมูลราคาน้ำมันวันนี้</span>
     </div>`;
     return;
   }
