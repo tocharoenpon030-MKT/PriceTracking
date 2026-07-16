@@ -1,689 +1,905 @@
-<!DOCTYPE html>
-<html lang="th">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ราคาสินค้า — Daily Price Tracker</title>
-<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
-<style>
-  :root {
-    --bg: #ffffff;
-    --surface: #f8f9fa;
-    --border: #e2e5e9;
-    --up: #dc2626;
-    --up-soft: rgba(220,38,38,0.08);
-    --down: #16a34a;
-    --down-soft: rgba(22,163,74,0.08);
-    --neutral: #6b7280;
-    --text: #111827;
-    --text-dim: #9ca3af;
-    --accent: #e07b1e;
-  }
-
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: 'Sarabun', sans-serif;
-    min-height: 100vh;
-    overflow-x: hidden;
-  }
-
-  /* grain overlay */
-  body::before {
-    content: '';
-    position: fixed; inset: 0;
-    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.015'/%3E%3C/svg%3E");
-    pointer-events: none; z-index: 0;
-  }
-
-  .wrap { position: relative; z-index: 1; max-width: 960px; margin: 0 auto; padding: 40px 20px 80px; }
-
-  /* header */
-  header {
-    display: flex; align-items: flex-start; justify-content: space-between;
-    flex-wrap: wrap; gap: 16px; margin-bottom: 40px;
-    padding-bottom: 28px; border-bottom: 1px solid var(--border);
-  }
-  .logo-block h1 {
-    font-size: 22px; font-weight: 700; letter-spacing: -0.5px; color: var(--text);
-  }
-  .logo-block .sub {
-    font-size: 13px; color: var(--neutral); margin-top: 4px;
-    font-family: 'IBM Plex Mono', monospace;
-  }
-  .date-badge {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 12px; color: var(--accent);
-    background: rgba(240,180,41,0.08);
-    border: 1px solid rgba(240,180,41,0.2);
-    padding: 6px 14px; border-radius: 20px;
-    white-space: nowrap; align-self: center;
-  }
-
-  /* stats row */
-  .stats {
-    display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
-    margin-bottom: 32px;
-  }
-  .stat {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 10px; padding: 16px 18px;
-    transition: border-color .2s;
-  }
-  .stat:hover { border-color: #c5c9d0; }
-  .stat .num {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 28px; font-weight: 600; line-height: 1;
-  }
-  .stat .label { font-size: 12px; color: var(--neutral); margin-top: 6px; }
-  .stat.up .num { color: var(--up); }
-  .stat.down .num { color: var(--down); }
-  .stat.total .num { color: var(--text); }
-
-  /* section headings */
-  .section-head {
-    display: flex; align-items: center; justify-content: space-between;
-    margin: 40px 0 16px;
-  }
-  .section-head h2 {
-    font-size: 16px; font-weight: 700; display: flex; align-items: center; gap: 8px;
-  }
-
-  /* filter bar */
-  .filter-bar {
-    display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap;
-  }
-  .filter-btn {
-    font-family: 'Sarabun', sans-serif;
-    font-size: 13px; padding: 6px 16px;
-    border-radius: 20px; border: 1px solid var(--border);
-    background: transparent; color: var(--neutral);
-    cursor: pointer; transition: all .15s;
-  }
-  .filter-btn:hover { border-color: #aab0bb; color: var(--text); }
-  .filter-btn.active { background: var(--text); color: #fff; border-color: var(--text); font-weight: 600; }
-  .filter-btn.up.active { background: var(--up); color: #fff; border-color: var(--up); }
-  .filter-btn.down.active { background: var(--down); color: #000; border-color: var(--down); }
-
-  /* data button */
-  .btn-data {
-    margin-left: auto;
-    font-family: 'Sarabun', sans-serif;
-    font-size: 13px; padding: 6px 18px;
-    border-radius: 20px; border: 1px solid var(--accent);
-    background: rgba(240,180,41,0.08); color: var(--accent);
-    cursor: pointer; transition: all .15s; display: flex; align-items: center; gap: 6px;
-  }
-  .btn-data:hover { background: rgba(240,180,41,0.18); }
-
-  /* table */
-  .table-wrap {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 12px; overflow: hidden;
-    box-shadow: 0 1px 8px rgba(0,0,0,0.06);
-  }
-  table { width: 100%; border-collapse: collapse; font-size: 14px; }
-  thead tr { border-bottom: 1px solid var(--border); }
-  thead th {
-    padding: 12px 16px; text-align: left;
-    font-size: 11px; font-weight: 600;
-    color: var(--text-dim); letter-spacing: .08em; text-transform: uppercase;
-    font-family: 'IBM Plex Mono', monospace;
-  }
-  thead th.right { text-align: right; }
-  tbody tr {
-    border-bottom: 1px solid var(--border);
-    transition: background .12s;
-  }
-  tbody tr:last-child { border-bottom: none; }
-  tbody tr:hover { background: rgba(0,0,0,0.02); }
-  td { padding: 13px 16px; vertical-align: middle; }
-  td.right { text-align: right; }
-
-  .group-tag {
-    font-size: 11px; color: var(--neutral);
-    background: rgba(0,0,0,0.05);
-    padding: 2px 8px; border-radius: 4px;
-    font-family: 'IBM Plex Mono', monospace;
-  }
-  .prod-name { font-weight: 500; color: var(--text); }
-  .price-mono { font-family: 'IBM Plex Mono', monospace; font-size: 13px; }
-
-  .badge {
-    display: inline-flex; align-items: center; gap: 4px;
-    font-family: 'IBM Plex Mono', monospace; font-size: 12px;
-    padding: 3px 10px; border-radius: 20px; font-weight: 600;
-  }
-  .badge.up { background: var(--up-soft); color: var(--up); }
-  .badge.down { background: var(--down-soft); color: var(--down); }
-  .badge.same { background: rgba(107,114,128,0.08); color: var(--neutral); }
-
-  /* loading / empty / error states */
-  .state-box {
-    display: flex; flex-direction: column; align-items: center;
-    justify-content: center; padding: 60px 20px; gap: 12px;
-    color: var(--neutral); font-size: 14px;
-  }
-  .state-box .ico { font-size: 36px; }
-  .spinner {
-    width: 32px; height: 32px;
-    border: 2px solid var(--border);
-    border-top-color: var(--accent);
-    border-radius: 50%;
-    animation: spin .7s linear infinite;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
-
-  /* modal */
-  .modal-bg {
-    display: none; position: fixed; inset: 0;
-    background: rgba(0,0,0,.4); backdrop-filter: blur(4px);
-    z-index: 100; align-items: center; justify-content: center;
-  }
-  .modal-bg.show { display: flex; }
-  .modal {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: 14px; padding: 28px; width: 90%; max-width: 700px;
-    max-height: 80vh; overflow-y: auto;
-    animation: popIn .2s ease;
-  }
-  @keyframes popIn { from { transform: scale(.96); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-  .modal-head {
-    display: flex; justify-content: space-between; align-items: center;
-    margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid var(--border);
-  }
-  .modal-head h2 { font-size: 16px; font-weight: 600; }
-  .close-btn {
-    background: none; border: none; color: var(--neutral);
-    font-size: 20px; cursor: pointer; line-height: 1;
-    padding: 4px 8px; border-radius: 6px; transition: all .15s;
-  }
-  .close-btn:hover { background: var(--surface); color: var(--text); }
-  .modal table { font-size: 13px; }
-  .modal thead th { padding: 8px 12px; }
-  .modal td { padding: 9px 12px; }
-
-  footer { margin-top: 48px; text-align: center; font-size: 12px; color: var(--text-dim); font-family: 'IBM Plex Mono', monospace; }
-
-  @media (max-width: 600px) {
-    .stats { grid-template-columns: repeat(3,1fr); gap: 8px; }
-    .stat .num { font-size: 22px; }
-    thead th, td { padding: 10px 10px; font-size: 13px; }
-    .filter-btn, .btn-data { font-size: 12px; }
-  }
-</style>
-</head>
-<body>
-<div class="wrap">
-
-  <header>
-    <div class="logo-block">
-      <h1>📊 Price Tracker</h1>
-      <div class="sub" id="sub-text">กำลังโหลด...</div>
-    </div>
-    <div style="display:flex; flex-direction:column; align-items:flex-end; gap:8px;">
-      <div class="date-badge" id="date-badge">—</div>
-      <button class="btn-data" style="margin-left:0;" onclick="window.open('https://docs.google.com/spreadsheets/d/1qo1zcJkR6jG5OkbvNdx5bxIPpcfFsshd1RvlctjaFPc/edit#gid=1457383902','_blank')">📋 ดู DATA ทั้งหมด</button>
-    </div>
-  </header>
-
-  <div class="stats">
-    <div class="stat up">
-      <div class="num" id="cnt-up">—</div>
-      <div class="label">🔺 ขึ้นราคา</div>
-    </div>
-    <div class="stat down">
-      <div class="num" id="cnt-down">—</div>
-      <div class="label">🔻 ลดราคา</div>
-    </div>
-    <div class="stat total">
-      <div class="num" id="cnt-total">—</div>
-      <div class="label">รายการทั้งหมดวันนี้</div>
-    </div>
-  </div>
-
-  <!-- ⛽ Oil price section -->
-  <div class="section-head">
-    <h2>⛽ ราคาน้ำมันวันนี้</h2>
-    <div class="date-badge" id="oil-date-badge">—</div>
-  </div>
-  <div class="table-wrap" style="margin-bottom: 8px;">
-    <div class="state-box" id="oil-loading">
-      <div class="spinner"></div>
-      <span>กำลังดึงราคาน้ำมัน...</span>
-    </div>
-    <div id="oil-container" style="display:none;"></div>
-  </div>
-
-  <div class="section-head">
-    <h2>🛒 รายการราคาสินค้าที่เปลี่ยนวันนี้</h2>
-  </div>
-
-  <div class="filter-bar">
-    <button class="filter-btn active" onclick="setFilter('all',this)">ทั้งหมด</button>
-    <button class="filter-btn up" onclick="setFilter('up',this)">🔺 ขึ้นราคา</button>
-    <button class="filter-btn down" onclick="setFilter('down',this)">🔻 ลดราคา</button>
-  </div>
-
-  <div class="table-wrap">
-    <div class="state-box" id="loading-state">
-      <div class="spinner"></div>
-      <span>กำลังดึงข้อมูลจาก Google Sheet...</span>
-    </div>
-    <div id="table-container" style="display:none;"></div>
-  </div>
-
-  <footer id="footer-text">Price Tracker v5 · ข้อมูลจาก Google Sheets</footer>
-</div>
-
-<!-- Modal: ดู DATA ทั้งหมด -->
-<div class="modal-bg" id="modal-bg" onclick="closeModal(event)">
-  <div class="modal">
-    <div class="modal-head">
-      <h2>📋 ราคาสินค้าทั้งหมด — วันนี้</h2>
-      <button class="close-btn" onclick="closeModalDirect()">✕</button>
-    </div>
-    <div id="modal-body">กำลังโหลด...</div>
-  </div>
-</div>
-
-<script>
 // ============================================================
-//  CONFIG — แก้ค่าตรงนี้
-// ============================================================
-const SHEET_ID    = "1qo1zcJkR6jG5OkbvNdx5bxIPpcfFsshd1RvlctjaFPc";
-const SHEET_NAME  = "เช็คราคาขาย7-2569";
-const DATA_START_ROW = 3;   // row เริ่มต้นข้อมูล (1-based)
-const DATE_ROW    = 2;      // row วันที่ (1-based)
-const FIRST_DATE_COL = 6;   // col เริ่มวันที่ (1-based)
-const COL_URL     = 5;
-const COL_NAME    = 3;
-const COL_GROUP   = 1;
-
-// แท็บราคาน้ำมัน — โครงสร้าง: A1="น้ำมัน", B1=วันที่, A2:A10=ชื่อ, B2:B10=ราคา (มีคอลัมน์เดียว จึงต้องเก็บค่าเมื่อวานเองผ่าน storage)
-const OIL_GID          = "506035330";
-const OIL_DATE_ROW     = 1; // 1-based
-const OIL_DATA_START_ROW = 2; // 1-based
-const OIL_COL_NAME     = 1; // A
-const OIL_COL_PRICE    = 2; // B
+//  PRICE TRACKER v6 — แบ่งรัน 100 รายการ/รอบ ทุก 10 นาที
+//  หลักการ:
+//   1) แบ่งงานเป็นก้อนคงที่ BATCH_SIZE แถวต่อรอบ (ไม่ใช่คุมด้วยเวลา)
+//      → เว้นช่วงนานขึ้นระหว่างรอบ กันเว็บมองว่าเป็น bot ยิงถี่
+//      → ยังมี "งบเวลา" เป็น safety backstop เผื่อ 100 แถวช้าผิดปกติ
+//   2) Error/การเปลี่ยนแปลงราคา เก็บลง "ชีต Log" แทน Script Properties
+//      → กัน quota ของ Properties บวมเกินตอนมี error เยอะ
+//   3) WATCHDOG ปรับให้เข้าใจช่วงพัก 10 นาทีระหว่างรอบ ไม่แจ้งเตือนผิด
+//   4) ทุก batch ครอบด้วย try/catch รอบนอก รับประกันว่า trigger
+//      รอบถัดไปจะถูกตั้งเสมอ แม้เกิด error ไม่คาดคิด
 // ============================================================
 
-let allChanges = [];
-let allRows    = [];
-let currentFilter = 'all';
+const CONFIG = {
+  SHEET_NAME:        "เช็คราคาขาย7-2569",
+  LOG_SHEET_NAME:     "ProgressLog",       // ชีตซ่อนสำหรับเก็บ error/การเปลี่ยนแปลงราคาแต่ละรอบ
+  DATA_START_ROW:     3,
+  DATE_ROW:           2,
+  FIRST_DATE_COL:     6,
+  COL_URL:            4,
+  COL_NAME:           3,
+  COL_GROUP:          1,
+  NOTIFY_EMAIL:       "to.charoenpon030@gmail.com",
+  FETCH_DELAY_MS:     600,              // หน่วงระหว่างแถว กันโดนบล็อก
+  BATCH_SIZE:         100,              // จำนวนแถวต่อรอบ
+  NEXT_BATCH_DELAY_MIN: 10,             // นาทีก่อนรอบถัดไปจะเริ่ม
+  MAX_RUNTIME_MS:     4.5 * 60 * 1000,  // safety backstop กัน 100 แถวช้าผิดปกติจน timeout
+  WATCHDOG_EVERY_MIN: 5,                // watchdog เช็คทุกกี่นาที
+  PROGRESS_KEY:       "priceTrackerProgress",
+  RUNNING_KEY:        "priceTrackerRunning",   // ใช้กันรันซ้อนกัน
+  LASTBEAT_KEY:       "priceTrackerLastBeat",  // เวลาล่าสุดที่ batch ทำงาน (สำหรับ watchdog)
+};
+// idle threshold ของ watchdog: ต้องนานกว่าช่วงพักปกติ (10 นาที) พอสมควร กันแจ้งเตือนผิด
+CONFIG.WATCHDOG_IDLE_MIN = CONFIG.NEXT_BATCH_DELAY_MIN + 5; // = 15 นาที
 
-// ── Fetch Sheet via CSV export (CORS-safe, ไม่ต้อง API key) ───
-async function fetchSheetByGid(gid) {
-  const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${gid}`;
-  const res  = await fetch(url);
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const text = await res.text();
-  return parseCSV(text);
+// ============================================================
+//  ENTRY POINT — เริ่มงานใหม่ทั้งหมด
+// ============================================================
+function fetchAndStorePrices() {
+  cleanBatchTriggers_();
+  const props = PropertiesService.getScriptProperties();
+  props.setProperty(CONFIG.PROGRESS_KEY, CONFIG.DATA_START_ROW.toString());
+  props.setProperty(CONFIG.RUNNING_KEY, "1");
+  props.setProperty(CONFIG.LASTBEAT_KEY, Date.now().toString());
+  props.deleteProperty("priceUpdated");
+  clearLogSheet_();
+  ensureWatchdog_();
+  runNextBatch_();
 }
 
-async function fetchSheet() {
-  // ใช้ GID 1457383902 ตามลิงก์ที่แชร์มา
-  const GID = "2078843511";
-  return fetchSheetByGid(GID);
-}
+// ============================================================
+//  BATCH RUNNER — ทำงานตามงบเวลา ไม่ใช่จำนวนแถวคงที่
+// ============================================================
+function runNextBatch_() {
+  const props = PropertiesService.getScriptProperties();
 
-// ── CSV parser รองรับ field ที่มี comma และ quote ─────────────
-function parseCSV(text) {
-  const rows = [];
-  const lines = text.split(/\r?\n/);
-  for (const line of lines) {
-    if (!line.trim()) continue;
-    const cols = [];
-    let cur = "", inQ = false;
-    for (let i = 0; i < line.length; i++) {
-      const ch = line[i];
-      if (ch === '"') {
-        if (inQ && line[i+1] === '"') { cur += '"'; i++; }
-        else inQ = !inQ;
-      } else if (ch === ',' && !inQ) {
-        cols.push(cur); cur = "";
-      } else { cur += ch; }
+  // กันรันซ้อน (เผื่อ watchdog กับ trigger ปกติชนกัน)
+  if (props.getProperty(CONFIG.RUNNING_KEY) === "BUSY") {
+    Logger.log("กำลังมีรอบทำงานอยู่แล้ว — ข้ามรอบนี้");
+    return;
+  }
+  props.setProperty(CONFIG.RUNNING_KEY, "BUSY");
+  props.setProperty(CONFIG.LASTBEAT_KEY, Date.now().toString());
+
+  const startTime = Date.now();
+
+  try {
+    const startRow = parseInt(props.getProperty(CONFIG.PROGRESS_KEY) || CONFIG.DATA_START_ROW);
+    const ss       = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet    = ss.getSheetByName(CONFIG.SHEET_NAME);
+    if (!sheet) { finishRunFlag_(); return; }
+
+    const todayCol = getTodayColumn(sheet);
+    if (todayCol === null) {
+      Logger.log("ไม่พบคอลัมน์วันนี้");
+      sendErrorEmail("ไม่พบคอลัมน์วันนี้ใน Row 2");
+      clearAll_();
+      return;
     }
-    cols.push(cur);
-    rows.push(cols);
+
+    const lastRow = sheet.getLastRow();
+    if (startRow > lastRow) {
+      const updatedSoFar = parseInt(props.getProperty("priceUpdated") || "0");
+      finishAll_(sheet, updatedSoFar);
+      return;
+    }
+
+    const numCols = Math.max(CONFIG.COL_URL, CONFIG.COL_NAME, CONFIG.COL_GROUP, todayCol);
+
+    let updated = parseInt(props.getProperty("priceUpdated") || "0");
+    const batchChanges = [];   // เก็บแค่ของรอบนี้ แล้ว append ลง log sheet ทีเดียว
+    const batchErrors  = [];
+
+    const writeBuffer = {};
+    let row = startRow;
+    let countThisBatch = 0;
+
+    Logger.log("เริ่ม batch จาก Row " + startRow + " (lastRow=" + lastRow + ", BATCH_SIZE=" + CONFIG.BATCH_SIZE + ")");
+
+    // ── ทำงานทีละแถว จนครบ BATCH_SIZE หรือครบทุกแถว หรือใกล้หมดงบเวลา (safety) ──
+    while (row <= lastRow && countThisBatch < CONFIG.BATCH_SIZE) {
+      if (Date.now() - startTime > CONFIG.MAX_RUNTIME_MS) {
+        Logger.log("ใกล้หมดงบเวลา (safety backstop) — พักงาน แล้วไปต่อรอบหน้าที่ Row " + row);
+        break;
+      }
+
+      // อ่านทีละแถว (เบากว่าอ่านทั้งก้อนตอนข้อมูลมาก และไม่เสียของถ้าพังกลางทาง)
+      const rowRange = sheet.getRange(row, 1, 1, numCols);
+      const values   = rowRange.getValues()[0];
+      const richTexts= rowRange.getRichTextValues()[0];
+
+      const productName = values[CONFIG.COL_NAME - 1];
+      const group        = values[CONFIG.COL_GROUP - 1];
+
+      if (!productName) { row++; continue; }
+
+      const url = extractUrl_(richTexts[CONFIG.COL_URL - 1], values[CONFIG.COL_URL - 1]);
+      if (!url) { row++; continue; }
+
+      Logger.log("Row " + row + ": " + String(productName).substring(0, 40));
+      countThisBatch++;
+
+      try {
+        const price = scrapePrice(url);
+        if (price === null) {
+          batchErrors.push({ name: productName, reason: "ดึงราคาไม่ได้" });
+        } else {
+          writeBuffer[row] = price;
+          updated++;
+          Logger.log("  ราคา: " + price);
+
+          if (todayCol > CONFIG.FIRST_DATE_COL) {
+            const prev = sheet.getRange(row, todayCol - 1).getValue();
+            if (prev && typeof prev === "number" && prev !== price) {
+              const diff = price - prev;
+              batchChanges.push({
+                group, name: productName,
+                oldPrice: prev, newPrice: price,
+                diff, pct: ((diff / prev) * 100).toFixed(1),
+                direction: diff > 0 ? "up" : "down",
+              });
+            }
+          }
+        }
+      } catch (e) {
+        batchErrors.push({ name: productName, reason: e.message });
+        Logger.log("  ERROR: " + e.message);
+      }
+
+      // เซฟ heartbeat ทุกแถว เผื่อ watchdog ต้องเช็ค
+      props.setProperty(CONFIG.LASTBEAT_KEY, Date.now().toString());
+
+      Utilities.sleep(CONFIG.FETCH_DELAY_MS);
+      row++;
+    }
+
+    // เขียนผลที่ได้ของรอบนี้ลงชีตหลัก
+    flushWrites_(sheet, writeBuffer, todayCol);
+
+    // เขียน error/การเปลี่ยนแปลงของรอบนี้ลง log sheet (กัน Properties บวม)
+    appendLog_(batchChanges, batchErrors);
+
+    // เซฟ progress (มีแค่ตัวเลขสั้นๆ ไม่บวม quota)
+    props.setProperty("priceUpdated", updated.toString());
+
+    if (row <= lastRow) {
+      // ยังไม่จบ — ตั้ง trigger ไปต่อในอีก NEXT_BATCH_DELAY_MIN นาที
+      props.setProperty(CONFIG.PROGRESS_KEY, row.toString());
+      props.setProperty(CONFIG.RUNNING_KEY, "1"); // ปลดสถานะ BUSY แต่ยังถือว่า "งานยังไม่เสร็จ"
+      cleanBatchTriggers_();
+      ScriptApp.newTrigger("runNextBatch_").timeBased().after(CONFIG.NEXT_BATCH_DELAY_MIN * 60 * 1000).create();
+      Logger.log("ตั้ง trigger รอบถัดไป (อีก " + CONFIG.NEXT_BATCH_DELAY_MIN + " นาที): Row " + row);
+    } else {
+      finishAll_(sheet, updated);
+    }
+
+  } catch (fatalErr) {
+    // กันพลาด: แม้ error ที่ไม่คาดคิดเกิดขึ้น ก็ต้องตั้ง trigger ไปต่อ ไม่ใช่ปล่อยให้ค้าง
+    Logger.log("FATAL in runNextBatch_: " + fatalErr.message);
+    props.setProperty(CONFIG.RUNNING_KEY, "1");
+    cleanBatchTriggers_();
+    ScriptApp.newTrigger("runNextBatch_").timeBased().after(CONFIG.NEXT_BATCH_DELAY_MIN * 60 * 1000).create();
+    sendErrorEmail("เกิด error กลางทาง แต่ระบบตั้ง trigger ไปต่อให้แล้ว: " + fatalErr.message);
   }
-  return rows;  // rows[r][c] = string
 }
 
-function toNum(s) {
-  if (s === null || s === undefined || s === "") return null;
-  const n = parseFloat(String(s).replace(/,/g, ""));
-  return isNaN(n) ? null : n;
+// ── เคลียร์ทุกอย่างเมื่อจบงานสมบูรณ์ ─────────────────────────
+function finishAll_(sheet, updated) {
+  Logger.log("ครบทุก row — ส่ง email สรุป");
+  const { changes, errors } = readAllLogs_();
+  sendSummaryEmail(changes, errors, updated);
+  clearAll_();
+}
+
+function clearAll_() {
+  const props = PropertiesService.getScriptProperties();
+  cleanBatchTriggers_();
+  cleanWatchdogTrigger_();
+  props.deleteProperty("priceUpdated");
+  props.deleteProperty(CONFIG.PROGRESS_KEY);
+  props.deleteProperty(CONFIG.RUNNING_KEY);
+  props.deleteProperty(CONFIG.LASTBEAT_KEY);
+  clearLogSheet_();
+}
+
+// ============================================================
+//  LOG SHEET — เก็บ error / การเปลี่ยนแปลงราคา แทน Script Properties
+//  (กัน quota บวมเมื่อมีหลายร้อยแถวและ error เยอะ)
+// ============================================================
+function getLogSheet_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(CONFIG.LOG_SHEET_NAME);
+  if (!sheet) {
+    sheet = ss.insertSheet(CONFIG.LOG_SHEET_NAME);
+    sheet.hideSheet();
+    sheet.getRange(1, 1, 1, 8).setValues([[
+      "type", "group", "name", "oldPrice", "newPrice", "diff", "pct", "reason"
+    ]]);
+  }
+  return sheet;
+}
+
+function clearLogSheet_() {
+  const sheet = getLogSheet_();
+  const lastRow = sheet.getLastRow();
+  if (lastRow > 1) {
+    sheet.getRange(2, 1, lastRow - 1, 8).clearContent();
+  }
+}
+
+function appendLog_(changes, errors) {
+  if (changes.length === 0 && errors.length === 0) return;
+  const sheet = getLogSheet_();
+  const rows = [];
+  for (const c of changes) {
+    rows.push(["change", c.group, c.name, c.oldPrice, c.newPrice, c.diff, c.pct, ""]);
+  }
+  for (const e of errors) {
+    rows.push(["error", "", e.name, "", "", "", "", e.reason]);
+  }
+  sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, 8).setValues(rows);
+}
+
+function readAllLogs_() {
+  const sheet = getLogSheet_();
+  const lastRow = sheet.getLastRow();
+  const changes = [];
+  const errors  = [];
+  if (lastRow <= 1) return { changes, errors };
+
+  const data = sheet.getRange(2, 1, lastRow - 1, 8).getValues();
+  for (const r of data) {
+    const [type, group, name, oldPrice, newPrice, diff, pct, reason] = r;
+    if (type === "change") {
+      changes.push({
+        group, name, oldPrice, newPrice, diff, pct,
+        direction: diff > 0 ? "up" : "down",
+      });
+    } else if (type === "error") {
+      errors.push({ name, reason });
+    }
+  }
+  return { changes, errors };
+}
+
+function finishRunFlag_() {
+  const props = PropertiesService.getScriptProperties();
+  props.setProperty(CONFIG.RUNNING_KEY, "1");
+}
+
+// ============================================================
+//  WATCHDOG — เผื่อ trigger หลุด/ค้างกลางทาง จะรันต่อให้เอง
+// ============================================================
+function ensureWatchdog_() {
+  cleanWatchdogTrigger_();
+  ScriptApp.newTrigger("watchdogCheck_")
+    .timeBased()
+    .everyMinutes(CONFIG.WATCHDOG_EVERY_MIN)
+    .create();
+}
+
+function watchdogCheck_() {
+  const props = PropertiesService.getScriptProperties();
+  const running = props.getProperty(CONFIG.RUNNING_KEY);
+
+  // ถ้าไม่มีงานค้าง ก็ไม่ต้องทำอะไร เคลียร์ watchdog ทิ้ง
+  if (!running) {
+    cleanWatchdogTrigger_();
+    return;
+  }
+
+  const lastBeat = parseInt(props.getProperty(CONFIG.LASTBEAT_KEY) || "0");
+  const idleMs   = Date.now() - lastBeat;
+
+  // ถ้าไม่มีความเคลื่อนไหวเกิน WATCHDOG_IDLE_MIN (ตั้งไว้นานกว่าช่วงพักปกติ 10 นาที)
+  // และไม่มี trigger ของ runNextBatch_ ค้างอยู่ → ถือว่า "ค้าง" ต้องสั่งรันต่อ
+  const hasBatchTrigger = ScriptApp.getProjectTriggers()
+    .some(t => t.getHandlerFunction() === "runNextBatch_");
+
+  if (idleMs > CONFIG.WATCHDOG_IDLE_MIN * 60 * 1000 && !hasBatchTrigger) {
+    Logger.log("WATCHDOG: ตรวจพบ process ค้าง — สั่งรันต่อให้อัตโนมัติ");
+    props.setProperty(CONFIG.RUNNING_KEY, "1"); // เคลียร์ BUSY เผื่อค้างจากรอบก่อน
+    runNextBatch_();
+  }
+}
+
+function cleanWatchdogTrigger_() {
+  for (const t of ScriptApp.getProjectTriggers()) {
+    if (t.getHandlerFunction() === "watchdogCheck_") {
+      ScriptApp.deleteTrigger(t);
+    }
+  }
+}
+
+// ── เขียน Sheet แบบ contiguous ranges ─────────────────────────
+function flushWrites_(sheet, writeBuffer, todayCol) {
+  const rows = Object.keys(writeBuffer).map(Number).sort((a, b) => a - b);
+  if (rows.length === 0) return;
+
+  let groupStart = rows[0];
+  let groupRows  = [writeBuffer[rows[0]]];
+
+  const flush = (start, data) => {
+    sheet.getRange(start, todayCol, data.length, 1)
+         .setValues(data.map(v => [v]));
+  };
+
+  for (let i = 1; i < rows.length; i++) {
+    if (rows[i] === rows[i-1] + 1) {
+      groupRows.push(writeBuffer[rows[i]]);
+    } else {
+      flush(groupStart, groupRows);
+      groupStart = rows[i];
+      groupRows  = [writeBuffer[rows[i]]];
+    }
+  }
+  flush(groupStart, groupRows);
+  Logger.log("  flushWrites: เขียน " + rows.length + " rows");
+}
+
+// ── ดึง URL จาก RichText ────────────────────────────────────────
+function extractUrl_(richText, fallbackValue) {
+  try {
+    if (richText) {
+      for (const run of richText.getRuns()) {
+        const link = run.getLinkUrl();
+        if (link && link.startsWith("http")) return link;
+      }
+    }
+  } catch(e) {}
+  if (fallbackValue && typeof fallbackValue === "string" && fallbackValue.startsWith("http"))
+    return fallbackValue;
+  return null;
+}
+
+// ── ล้าง trigger runNextBatch_ ──────────────────────────────────
+function cleanBatchTriggers_() {
+  for (const t of ScriptApp.getProjectTriggers()) {
+    if (t.getHandlerFunction() === "runNextBatch_") {
+      ScriptApp.deleteTrigger(t);
+    }
+  }
+}
+
+// ============================================================
+//  ดึง URL จาก Hyperlink (ใช้ใน testSingleRow)
+// ============================================================
+function getHyperlinkUrl(cell) {
+  return extractUrl_(cell.getRichTextValue(), cell.getValue());
+}
+
+// ============================================================
+//  หาคอลัมน์วันนี้
+// ============================================================
+function getTodayColumn(sheet) {
+  const today  = new Date();
+  const day    = today.getDate();
+  const month  = today.getMonth() + 1;
+  const yearCE = today.getFullYear();
+  const yearBE = yearCE + 543;
+
+  const lastCol   = sheet.getLastColumn();
+  const numCols   = lastCol - CONFIG.FIRST_DATE_COL + 1;
+  if (numCols <= 0) return null;
+
+  const rowValues  = sheet.getRange(CONFIG.DATE_ROW, CONFIG.FIRST_DATE_COL, 1, numCols).getValues()[0];
+  const rowDisplay = sheet.getRange(CONFIG.DATE_ROW, CONFIG.FIRST_DATE_COL, 1, numCols).getDisplayValues()[0];
+
+  for (let i = 0; i < numCols; i++) {
+    const col  = CONFIG.FIRST_DATE_COL + i;
+    const val  = rowValues[i];
+    const disp = rowDisplay[i];
+
+    if (val instanceof Date) {
+      if (val.getDate() === day && val.getMonth() + 1 === month) return col;
+    }
+    const str = String(disp).trim();
+    if (str.includes("/")) {
+      const p = str.split("/");
+      if (p.length === 3) {
+        const d = parseInt(p[0]), m = parseInt(p[1]), y = parseInt(p[2]);
+        if (d === day && m === month && (y === yearBE || y === yearCE)) return col;
+      }
+    }
+  }
+  return null;
+}
+
+// ============================================================
+//  FETCH HTML — ลอง 3 ครั้ง
+// ============================================================
+// จำกัดขนาด HTML ก่อนเอาไป regex กัน regex engine แครชจากหน้าที่ใหญ่ผิดปกติ
+const MAX_HTML_LEN = 400000; // ~400KB ตัวอักษร พอสำหรับหา price tag ในหน้าเว็บทั่วไป
+
+function fetchHtml(url) {
+  const agents = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+  ];
+
+  for (let i = 0; i < 3; i++) {
+    try {
+      const resp = UrlFetchApp.fetch(url, {
+        method: "get",
+        muteHttpExceptions: true,
+        followRedirects: true,
+        headers: {
+          "User-Agent":                agents[i % agents.length],
+          "Accept":                    "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "Accept-Language":           "th-TH,th;q=0.9,en-US;q=0.8,en;q=0.7",
+          "Accept-Encoding":           "gzip, deflate, br",
+          "Cache-Control":             "max-age=0",
+          "Connection":                "keep-alive",
+          "Upgrade-Insecure-Requests": "1",
+          "Sec-Fetch-Dest":            "document",
+          "Sec-Fetch-Mode":            "navigate",
+          "Sec-Fetch-Site":            "none",
+          "Sec-Fetch-User":            "?1",
+          "Sec-CH-UA":                 '"Chromium";v="124", "Google Chrome";v="124"',
+          "Sec-CH-UA-Mobile":          "?0",
+          "Sec-CH-UA-Platform":        '"Windows"',
+          "DNT":                       "1",
+        }
+      });
+      const code = resp.getResponseCode();
+      Logger.log("  HTTP " + code);
+      if (code === 200) {
+        const text = resp.getContentText("UTF-8");
+        // จำกัดความยาว กัน regex engine แครชจากหน้าเว็บที่ใหญ่ผิดปกติ
+        return text.length > MAX_HTML_LEN ? text.substring(0, MAX_HTML_LEN) : text;
+      }
+      if (code === 404) return null;
+      Utilities.sleep(1000 * (i + 1));
+    } catch(e) {
+      Logger.log("  fetch error: " + e.message);
+    }
+  }
+  return null;
+}
+
+// ============================================================
+//  SCRAPER
+// ============================================================
+function scrapePrice(url) {
+  const html = fetchHtml(url);
+  if (!html) return null;
+
+  if (url.includes("thaiwatsadu.com"))     return parseSite(html, [
+    /"price"\s*:\s*"?(\d[\d.]*)"?/, /"salePrice"\s*:\s*"?(\d[\d.]*)"?/,
+    /"selling_price"\s*:\s*(\d[\d.]*)/, /"finalPrice"\s*:\s*(\d[\d.]*)/,
+    /data-price="(\d[\d.]*)"/, /gtag[^)]*'value'\s*,\s*(\d[\d.]*)/,
+  ], html);
+
+  // ── HomePro ─────────────────────────────────────────────────
+  // หน้าแบบใหม่ (Marketplace, /p/xxxx) แสดงราคาเป็นข้อความ "฿ 499" ตรงๆ
+  // (ไม่ใช่ JSON) จึงต้องจับด้วย pattern นี้ก่อน แล้วค่อยเผื่อ JSON แบบเก่า
+  // ไว้ท้ายๆ สำหรับหน้าสินค้าแบบเก่าที่อาจยังมีอยู่
+  if (url.includes("homepro.co.th"))       return parseSite(html, [
+    /฿\s*([\d,]+(?:\.\d+)?)/,
+    /"price"\s*:\s*"?(\d[\d.]*)"?/, /"specialPrice"\s*:\s*(\d[\d.]*)/,
+    /"priceValue"\s*:\s*(\d[\d.]*)/, /data-price="(\d[\d.]*)"/,
+    /"value"\s*:\s*(\d[\d.]*)\s*,\s*"priceCurrency"/,
+  ], html);
+
+  // ── OneStockHome (วันสต๊อกโฮม) ─────────────────────────────────
+  // หน้า /th/items/... แสดงราคาเป็นข้อความ "177.00 บาท" ตรงๆ (ไม่ใช่ JSON,
+  // ไม่มี data-price attribute, ไม่ใช้สัญลักษณ์ ฿) จึงต้องจับด้วย pattern นี้เป็นหลัก
+  // แล้วค่อยเผื่อ JSON แบบเก่าไว้ท้ายๆ สำหรับหน้าอื่นที่อาจยังมีอยู่
+  if (url.includes("onestockhome.com"))    return parseSite(html, [
+    /(\d[\d,]*\.\d{2})\s*(?:<\/?[^>]+>\s*)*บาท/,
+    /"selling_price"\s*:\s*(\d[\d.]*)/, /"final_price"\s*:\s*(\d[\d.]*)/,
+    /"price"\s*:\s*"?(\d[\d.]*)"?/, /"discounted_price"\s*:\s*(\d[\d.]*)/,
+  ], html);
+
+  if (url.includes("globalhouse.co.th"))   return parseSite(html, [
+    /"price"\s*:\s*"?(\d[\d.]*)"?/, /"selling_price"\s*:\s*(\d[\d.]*)/,
+    /data-price="(\d[\d.]*)"/, /"regularPrice"\s*:\s*(\d[\d.]*)/,
+  ], html);
+
+  // ── DoHome ──────────────────────────────────────────────────
+  // เว็บใหม่ (Next.js) แสดงราคาเป็นข้อความ "฿43.00/กระป๋อง" ตรงๆ
+  // จับแบบนี้ก่อน ปลอดภัยกว่าไปเสี่ยงจับ "price": จาก JSON อื่นในหน้าเว็บ
+  // ส่วน pattern แบบ Magento เดิม (data-price-amount ฯลฯ) เก็บไว้เผื่อหน้าเก่า
+  if (url.includes("dohome.co.th"))        return parseSite(html, [
+    /฿\s*([\d,]+(?:\.\d+)?)/,
+    /"price"\s*:\s*"?(\d[\d.]*)"?/, /"specialPrice"\s*:\s*(\d[\d.]*)/,
+    /data-price-amount="(\d[\d.]*)"/, /"salePrice"\s*:\s*"?(\d[\d.]*)"?/,
+  ], html);
+
+  // ── LnwShop (แพลตฟอร์มร้านค้าออนไลน์สำเร็จรูป เช่น neotools.lnwshop.com) ──
+  // แสดงราคาเป็นข้อความ "฿ 30.00" หรือ "30.00 บาท" ตรงๆ ไม่ใช่ JSON
+  if (url.includes("lnwshop.com"))         return parseSite(html, [
+    /฿\s*([\d,]+(?:\.\d+)?)/,
+    /(\d[\d,]*(?:\.\d+)?)\s*(?:<\/?[^>]+>\s*)*บาท/,
+  ], html);
+
+  // ── เว็บอื่นๆ ที่ไม่รู้จัก (fallback) ───────────────────────────
+  // อัพเกรดให้ครอบคลุมรูปแบบราคาที่พบบ่อยที่สุดในเว็บร้านค้าไทยทั่วไป:
+  // "฿ 499.00" หรือ "499.00 บาท" (มี/ไม่มีทศนิยมก็ได้) นอกเหนือจาก JSON/data-price เดิม
+  return parseSite(html, [
+    /"price"\s*:\s*"?(\d[\d.]*)"?/, /"selling_price"\s*:\s*(\d[\d.]*)/,
+    /data-price="(\d[\d.]*)"/,
+    /฿\s*([\d,]+(?:\.\d+)?)/,
+    /(\d[\d,]*(?:\.\d+)?)\s*(?:<\/?[^>]+>\s*)*บาท/,
+  ], html);
+}
+
+function parseSite(html, patterns, fullHtml) {
+  const ld = extractJsonLdPrice(fullHtml || html);
+  if (ld) return ld;
+  return extractFirstMatch(html, patterns);
+}
+
+function extractJsonLdPrice(html) {
+  const re = /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+  let m;
+  while ((m = re.exec(html)) !== null) {
+    try {
+      const obj   = JSON.parse(m[1]);
+      const items = Array.isArray(obj) ? obj : [obj];
+      for (const item of items) {
+        const price = item.offers?.price || item.offers?.[0]?.price || item.price;
+        if (price) {
+          const n = parseFloat(String(price).replace(/,/g, ""));
+          if (!isNaN(n) && n > 0 && n < 10000000) return n;
+        }
+      }
+    } catch(e) {}
+  }
+  return null;
+}
+
+function extractFirstMatch(html, patterns) {
+  for (const p of patterns) {
+    const m = html.match(p);
+    if (m && m[1]) {
+      const n = parseFloat(String(m[1]).replace(/,/g, ""));
+      if (!isNaN(n) && n > 0 && n < 10000000) return n;
+    }
+  }
+  return null;
+}
+
+// ============================================================
+//  EMAIL
+// ============================================================
+function sendSummaryEmail(changes, errors, updated) {
+  if (changes.length === 0 && errors.length === 0) return;
+
+  const today   = new Date();
+  const dateStr = today.getDate() + "/" + (today.getMonth()+1) + "/" + (today.getFullYear()+543);
+  const upList  = changes.filter(c => c.direction === "up");
+  const dnList  = changes.filter(c => c.direction === "down");
+
+  let html = `<div style="font-family:Arial,sans-serif;max-width:820px;margin:0 auto;">
+  <div style="background:#1a73e8;color:#fff;padding:14px 20px;border-radius:8px 8px 0 0;">
+    <h2 style="margin:0;font-size:18px;">📊 รายงานราคาสินค้า — ${dateStr}</h2>
+  </div>
+  <div style="background:#f8f9fa;padding:10px 20px;border:1px solid #ddd;font-size:13px;">
+    ✅ อัพเดต <b>${updated}</b> รายการ &nbsp;|&nbsp;
+    🔺 ขึ้นราคา <b>${upList.length}</b> &nbsp;|&nbsp;
+    🔻 ลดราคา <b>${dnList.length}</b> &nbsp;|&nbsp;
+    ⚠️ error <b>${errors.length}</b>
+  </div>`;
+
+  const tbl = (list, color, bg, sign) => {
+    let t = `<table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:4px;">
+    <tr style="background:${bg};">
+      <th style="padding:7px 8px;border:1px solid #ddd;text-align:left;">กลุ่ม</th>
+      <th style="padding:7px 8px;border:1px solid #ddd;text-align:left;">สินค้า</th>
+      <th style="padding:7px 8px;border:1px solid #ddd;text-align:right;">ราคาเดิม</th>
+      <th style="padding:7px 8px;border:1px solid #ddd;text-align:right;">ราคาใหม่</th>
+      <th style="padding:7px 8px;border:1px solid #ddd;text-align:right;">+/−</th>
+      <th style="padding:7px 8px;border:1px solid #ddd;text-align:right;">%</th>
+    </tr>`;
+    for (const c of list) {
+      t += `<tr>
+        <td style="padding:6px 8px;border:1px solid #eee;">${c.group}</td>
+        <td style="padding:6px 8px;border:1px solid #eee;">${c.name}</td>
+        <td style="padding:6px 8px;border:1px solid #eee;text-align:right;">${fmt(c.oldPrice)}</td>
+        <td style="padding:6px 8px;border:1px solid #eee;text-align:right;font-weight:bold;color:${color};">${fmt(c.newPrice)}</td>
+        <td style="padding:6px 8px;border:1px solid #eee;text-align:right;color:${color};">${sign}${fmt(Math.abs(c.diff))}</td>
+        <td style="padding:6px 8px;border:1px solid #eee;text-align:right;color:${color};">${sign}${c.pct}%</td>
+      </tr>`;
+    }
+    return t + "</table>";
+  };
+
+  if (upList.length > 0) {
+    html += `<h3 style="margin:16px 0 4px;color:#c62828;">🔺 ขึ้นราคา (${upList.length} รายการ)</h3>` + tbl(upList, "#c62828", "#ffcdd2", "+");
+  }
+  if (dnList.length > 0) {
+    html += `<h3 style="margin:16px 0 4px;color:#2e7d32;">🔻 ลดราคา (${dnList.length} รายการ)</h3>` + tbl(dnList, "#2e7d32", "#c8e6c9", "−");
+  }
+  if (errors.length > 0) {
+    html += `<h3 style="margin:16px 0 4px;color:#e65100;">⚠️ ดึงราคาไม่ได้ (${errors.length} รายการ)</h3>
+    <table style="width:100%;border-collapse:collapse;font-size:12px;">
+    <tr style="background:#ffe0b2;"><th style="padding:6px 8px;border:1px solid #ddd;text-align:left;">สินค้า</th><th style="padding:6px 8px;border:1px solid #ddd;text-align:left;">สาเหตุ</th></tr>`;
+    for (const e of errors) {
+      html += `<tr><td style="padding:5px 8px;border:1px solid #eee;">${e.name}</td><td style="padding:5px 8px;border:1px solid #eee;color:#888;">${e.reason}</td></tr>`;
+    }
+    html += `</table><p style="font-size:11px;color:#999;">กรุณากรอกราคาที่ดึงไม่ได้ด้วยตนเอง</p>`;
+  }
+
+  html += `<p style="font-size:11px;color:#bbb;text-align:center;padding:12px 0;">Price Tracker v6 — Google Apps Script</p></div>`;
+
+  GmailApp.sendEmail(
+    CONFIG.NOTIFY_EMAIL,
+    "[ราคาสินค้า " + dateStr + "] ขึ้น " + upList.length + " | ลด " + dnList.length + " | error " + errors.length,
+    "", { htmlBody: html, name: "Price Tracker" }
+  );
+}
+
+function sendErrorEmail(msg) {
+  GmailApp.sendEmail(CONFIG.NOTIFY_EMAIL, "[Price Tracker] ERROR", msg, { name: "Price Tracker" });
 }
 
 function fmt(n) {
-  if (n === null || n === undefined || n === "") return "—";
   return Number(n).toLocaleString("th-TH") + " ฿";
 }
 
-function todayStr() {
-  const d = new Date();
-  return d.getDate() + "/" + (d.getMonth()+1) + "/" + (d.getFullYear()+543);
-}
-
-function findTodayColIndex(rows) {
-  const dateRowIdx = DATE_ROW - 1;
-  const today = new Date();
-  const day = today.getDate(), month = today.getMonth()+1;
-  const yearCE = today.getFullYear(), yearBE = yearCE + 543;
-
-  const row = rows[dateRowIdx];
-  if (!row) return -1;
-
-  for (let c = FIRST_DATE_COL - 1; c < row.length; c++) {
-    const str = String(row[c] || "").trim();
-    if (!str) continue;
-    // รองรับ "2/6/2569", "2/6/2026", "02/06/2569"
-    if (str.includes("/")) {
-      const p = str.split("/");
-      if (p.length >= 2) {
-        const dd = parseInt(p[0]), mm = parseInt(p[1]);
-        const yy = p[2] ? parseInt(p[2]) : 0;
-        if (dd === day && mm === month) {
-          if (!p[2] || yy === yearBE || yy === yearCE) return c;
-        }
-      }
-    }
-    // รองรับ "2-6-2569"
-    if (str.includes("-")) {
-      const p = str.split("-");
-      if (p.length >= 2) {
-        const dd = parseInt(p[0]), mm = parseInt(p[1]);
-        if (dd === day && mm === month) return c;
-      }
-    }
+// ============================================================
+//  TRIGGER & MENU
+// ============================================================
+function setupDailyTrigger() {
+  for (const t of ScriptApp.getProjectTriggers()) {
+    if (t.getHandlerFunction() === "fetchAndStorePrices") ScriptApp.deleteTrigger(t);
   }
-  return -1;
+  ScriptApp.newTrigger("fetchAndStorePrices").timeBased().everyDays(1).atHour(7).create();
+  SpreadsheetApp.getUi().alert("✅ ตั้ง Trigger เรียบร้อย!\nจะรันทุกวัน ประมาณ 07:00–08:00 น.");
 }
 
-async function load() {
-  try {
-    const rows = await fetchSheet();
+function testSingleRow() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.SHEET_NAME);
+  const row   = 3;
+  const url   = getHyperlinkUrl(sheet.getRange(row, CONFIG.COL_URL));
+  const name  = sheet.getRange(row, CONFIG.COL_NAME).getValue();
+  Logger.log("ทดสอบ Row " + row + ": " + name + "\nURL: " + url);
+  if (!url) { SpreadsheetApp.getUi().alert("ไม่พบ URL ใน Row " + row); return; }
+  const price = scrapePrice(url);
+  const msg   = price !== null ? price + " บาท" : "ดึงไม่ได้ (เว็บบล็อก)";
+  Logger.log("ราคา: " + msg);
+  SpreadsheetApp.getUi().alert(name + "\n\nราคา: " + msg);
+}
 
-    const todayColIdx = findTodayColIndex(rows);
-    const prevColIdx  = todayColIdx > 0 ? todayColIdx - 1 : -1;
-
-    const changes = [];
-    const allData = [];
-
-    for (let r = DATA_START_ROW - 1; r < rows.length; r++) {
-      const row = rows[r];
-      if (!row) continue;
-
-      const name  = String(row[COL_NAME  - 1] || "").trim();
-      const group = String(row[COL_GROUP - 1] || "").trim();
-      if (!name) continue;
-
-      const todayPrice = todayColIdx >= 0 ? toNum(row[todayColIdx]) : null;
-      const prevPrice  = prevColIdx  >= 0 ? toNum(row[prevColIdx])  : null;
-
-      allData.push({ name, group, todayPrice, prevPrice });
-
-      if (todayPrice !== null && prevPrice !== null &&
-          typeof todayPrice === "number" && typeof prevPrice === "number" &&
-          todayPrice !== prevPrice) {
-        const diff = todayPrice - prevPrice;
-        changes.push({
-          group, name,
-          oldPrice: prevPrice, newPrice: todayPrice,
-          diff, pct: ((diff / prevPrice) * 100).toFixed(1),
-          direction: diff > 0 ? "up" : "down",
-        });
-      }
-    }
-
-    allChanges = changes;
-    allRows    = allData;
-    renderDashboard();
-
-  } catch(e) {
-    console.error(e);
-    document.getElementById("loading-state").innerHTML = `
-      <div class="ico">⚠️</div>
-      <span>โหลดข้อมูลไม่ได้: ${e.message}</span>
-      <span style="font-size:12px;color:var(--text-dim)">ตรวจสอบว่า Sheet เปิด Public แล้ว</span>`;
+function debugDateRow() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.SHEET_NAME);
+  const lastCol = sheet.getLastColumn();
+  let msg = "ค่าใน Row 2:\n";
+  for (let col = CONFIG.FIRST_DATE_COL; col <= Math.min(lastCol, CONFIG.FIRST_DATE_COL + 4); col++) {
+    const cell = sheet.getRange(CONFIG.DATE_ROW, col);
+    msg += "Col " + col + ": value=" + cell.getValue() + " | display=" + cell.getDisplayValue() + "\n";
   }
+  Logger.log(msg);
+  SpreadsheetApp.getUi().alert(msg);
 }
 
-function renderDashboard() {
-  const upList   = allChanges.filter(c => c.direction === "up");
-  const downList = allChanges.filter(c => c.direction === "down");
+// ── เมนูเสริม: เช็คสถานะงานที่กำลังรัน / หยุดงานฉุกเฉิน ──────────
+function checkStatus() {
+  const props = PropertiesService.getScriptProperties();
+  const running  = props.getProperty(CONFIG.RUNNING_KEY);
+  const progress = props.getProperty(CONFIG.PROGRESS_KEY);
+  const lastBeat = props.getProperty(CONFIG.LASTBEAT_KEY);
+  const hasTrig  = ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === "runNextBatch_");
 
-  document.getElementById("cnt-up").textContent    = upList.length;
-  document.getElementById("cnt-down").textContent  = downList.length;
-  document.getElementById("cnt-total").textContent = allRows.filter(r => r.todayPrice !== null).length;
-  document.getElementById("date-badge").textContent = "วันที่ " + todayStr();
-  document.getElementById("sub-text").textContent   = "อัพเดตล่าสุด " + new Date().toLocaleTimeString("th-TH");
-
-  renderTable(currentFilter);
-  renderModal();
+  let msg = running
+    ? "🟢 กำลังทำงานอยู่\nหยุดล่าสุดที่ Row: " + progress +
+      "\nมี trigger รอบถัดไป: " + (hasTrig ? "มี" : "ไม่มี (watchdog จะจัดการให้)") +
+      (lastBeat ? "\nอัพเดตล่าสุด: " + new Date(parseInt(lastBeat)).toLocaleString("th-TH") : "")
+    : "⚪ ไม่มีงานที่กำลังรันอยู่";
+  SpreadsheetApp.getUi().alert(msg);
 }
 
-function renderTable(filter) {
-  const list = filter === "all" ? allChanges
-             : allChanges.filter(c => c.direction === filter);
-
-  document.getElementById("loading-state").style.display = "none";
-  const container = document.getElementById("table-container");
-  container.style.display = "block";
-
-  if (list.length === 0) {
-    container.innerHTML = `<div class="state-box">
-      <div class="ico">${filter === "all" ? "✅" : "—"}</div>
-      <span>${filter === "all" ? "ไม่มีรายการที่ราคาเปลี่ยนวันนี้" : "ไม่มีรายการในหมวดนี้"}</span>
-    </div>`;
-    return;
-  }
-
-  let html = `<table>
-    <thead><tr>
-      <th>กลุ่ม</th>
-      <th>ชื่อสินค้า</th>
-      <th class="right">ราคาเมื่อวาน</th>
-      <th class="right">ราคาวันนี้</th>
-      <th class="right">เปลี่ยน</th>
-    </tr></thead><tbody>`;
-
-  for (const c of list) {
-    const sign = c.direction === "up" ? "+" : "−";
-    html += `<tr>
-      <td><span class="group-tag">${c.group || "—"}</span></td>
-      <td><span class="prod-name">${c.name}</span></td>
-      <td class="right price-mono">${fmt(c.oldPrice)}</td>
-      <td class="right price-mono" style="color:var(--${c.direction})">${fmt(c.newPrice)}</td>
-      <td class="right">
-        <span class="badge ${c.direction}">${sign}${Math.abs(c.pct)}%</span>
-      </td>
-    </tr>`;
-  }
-  html += "</tbody></table>";
-  container.innerHTML = html;
+function stopAllNow() {
+  clearAll_();
+  SpreadsheetApp.getUi().alert("⏹ หยุดงานทั้งหมดและล้างสถานะเรียบร้อย");
 }
 
-function renderModal() {
-  const data = allRows.filter(r => r.todayPrice !== null);
-  if (data.length === 0) { document.getElementById("modal-body").innerHTML = "<p style='color:var(--neutral)'>ยังไม่มีข้อมูลวันนี้</p>"; return; }
-
-  let html = `<table>
-    <thead><tr>
-      <th>กลุ่ม</th>
-      <th>ชื่อสินค้า</th>
-      <th class="right">ราคาเมื่อวาน</th>
-      <th class="right">ราคาวันนี้</th>
-      <th class="right">เปลี่ยน</th>
-    </tr></thead><tbody>`;
-
-  for (const r of data) {
-    let badge = "<span style='color:var(--text-dim);font-size:12px'>—</span>";
-    if (r.todayPrice !== null && r.prevPrice !== null && r.todayPrice !== r.prevPrice) {
-      const diff = r.todayPrice - r.prevPrice;
-      const pct  = ((diff / r.prevPrice) * 100).toFixed(1);
-      const dir  = diff > 0 ? "up" : "down";
-      const sign = dir === "up" ? "+" : "−";
-      badge = `<span class="badge ${dir}">${sign}${Math.abs(pct)}%</span>`;
-    }
-    html += `<tr>
-      <td><span class="group-tag">${r.group || "—"}</span></td>
-      <td>${r.name}</td>
-      <td class="right price-mono">${fmt(r.prevPrice)}</td>
-      <td class="right price-mono" style="font-weight:600">${fmt(r.todayPrice)}</td>
-      <td class="right">${badge}</td>
-    </tr>`;
-  }
-  html += "</tbody></table>";
-  document.getElementById("modal-body").innerHTML = html;
+function onOpen() {
+  SpreadsheetApp.getUi()
+    .createMenu("🏷️ Price Tracker")
+    .addItem("▶ ดึงราคาตอนนี้เลย", "fetchAndStorePrices")
+    .addItem("📍 เช็คสถานะงาน", "checkStatus")
+    .addItem("⏹ หยุดงานทั้งหมด", "stopAllNow")
+    .addSeparator()
+    .addItem("🧪 ทดสอบ Row 3", "testSingleRow")
+    .addItem("🔍 Debug วันที่ใน Row 2", "debugDateRow")
+    .addItem("🔧 Debug เซลล์ URL Row 3", "debugCellE3_")
+    .addSeparator()
+    .addItem("⏰ ตั้ง Trigger อัตโนมัติทุกเช้า 07:00", "setupDailyTrigger")
+    .addSeparator()
+    .addItem("⛽ ดึงราคาน้ำมัน ปตท. ตอนนี้", "fetchOilPricePTT")
+    .addItem("🔧 Debug ราคาน้ำมัน (ดู raw response)", "debugOilPriceRaw_")
+    .addItem("⏰ ตั้ง Trigger ราคาน้ำมันทุกเช้า 07:00", "setupDailyOilPriceTrigger")
+    .addToUi();
 }
-
-function setFilter(f, btn) {
-  currentFilter = f;
-  document.querySelectorAll(".filter-btn").forEach(b => b.classList.remove("active"));
-  btn.classList.add("active");
-  renderTable(f);
-}
-
-function openModal()  { document.getElementById("modal-bg").classList.add("show"); }
-function closeModalDirect() { document.getElementById("modal-bg").classList.remove("show"); }
-function closeModal(e) { if (e.target === document.getElementById("modal-bg")) closeModalDirect(); }
 
 // ============================================================
-//  ⛽ ราคาน้ำมัน — แท็บนี้มีแค่คอลัมน์เดียว (ราคาล่าสุด) เลยต้อง
-//  จำค่าของเมื่อวานเองด้วย window.storage แล้วเทียบทุกครั้งที่โหลด
+//  ราคาน้ำมัน ปตท. (PTT OR) — ดึงจาก SOAP Web Service ทางการ
+//  https://orapiweb.pttor.com/oilservice/OilPrice.asmx
 // ============================================================
+const OIL_CONFIG = {
+  SHEET_NAME: "ราคาน้ำมัน",
+  SOAP_URL: "https://orapiweb.pttor.com/oilservice/OilPrice.asmx",
+  HEADER_ROW: 2, // แถวที่มีคำว่า "ชื่อน้ำมัน" และวันที่ (ยืนยันจากผู้ใช้ว่าอยู่แถว 2 ไม่ใช่แถว 1)
+};
 
-function parseThaiDateKey(str) {
-  // "15/7/2569" -> "2569-07-15" (ใช้เป็น key เทียบวันที่)
-  str = String(str || "").trim();
-  const p = str.split(/[\/\-]/);
-  if (p.length < 3) return str;
-  const dd = p[0].padStart(2, "0");
-  const mm = p[1].padStart(2, "0");
-  return `${p[2]}-${mm}-${dd}`;
+// เรียก SOAP API แล้วคืนค่า raw XML ทั้งก้อน (ยังไม่แกะ)
+function getOilPriceRawXml_() {
+  const soapEnvelope =
+    '<?xml version="1.0" encoding="utf-8"?>' +
+    '<soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">' +
+      '<soap:Body>' +
+        '<CurrentOilPrice xmlns="http://www.pttor.com">' +
+          '<Language>thai</Language>' +
+        '</CurrentOilPrice>' +
+      '</soap:Body>' +
+    '</soap:Envelope>';
+
+  const options = {
+    method: "post",
+    contentType: "text/xml; charset=utf-8",
+    headers: { "SOAPAction": '"http://www.pttor.com/CurrentOilPrice"' },
+    payload: soapEnvelope,
+    muteHttpExceptions: true,
+  };
+
+  const response = UrlFetchApp.fetch(OIL_CONFIG.SOAP_URL, options);
+  const code = response.getResponseCode();
+  const body = response.getContentText();
+  if (code !== 200) {
+    throw new Error("HTTP " + code + ": " + body.substring(0, 500));
+  }
+  return body;
 }
 
-async function loadOil() {
+// ใช้ตรวจสอบโครงสร้าง XML จริงที่ได้กลับมา (รันตัวนี้ก่อนถ้า fetchOilPricePTT พัง)
+function debugOilPriceRaw_() {
   try {
-    const rows = await fetchSheetByGid(OIL_GID);
-
-    const dateRow = rows[OIL_DATE_ROW - 1] || [];
-    const dateStr = String(dateRow[OIL_COL_PRICE - 1] || "").trim();
-    const dateKey = parseThaiDateKey(dateStr) || todayStr();
-
-    const oilToday = [];
-    for (let r = OIL_DATA_START_ROW - 1; r < rows.length; r++) {
-      const row = rows[r];
-      if (!row) continue;
-      const name = String(row[OIL_COL_NAME - 1] || "").trim();
-      if (!name) continue;
-      const price = toNum(row[OIL_COL_PRICE - 1]);
-      if (price === null) continue;
-      oilToday.push({ name, price });
-    }
-
-    // โหลดประวัติราคาที่เคยบันทึกไว้ (ข้อมูล shared เพื่อให้ทุกคนที่เปิดหน้านี้เห็นค่าตรงกัน)
-    let history = [];
-    try {
-      const stored = await window.storage.get('oil-price-history', true);
-      if (stored && stored.value) history = JSON.parse(stored.value);
-    } catch (e) {
-      history = []; // ยังไม่เคยมีข้อมูล
-    }
-
-    // หา entry ล่าสุดที่ "วันที่ไม่ตรงกับวันนี้" มาใช้เป็นราคาเมื่อวาน
-    let prevEntry = null;
-    for (let i = history.length - 1; i >= 0; i--) {
-      if (history[i].date !== dateKey) { prevEntry = history[i]; break; }
-    }
-    const prevMap = {};
-    if (prevEntry) {
-      for (const item of prevEntry.prices) prevMap[item.name] = item.price;
-    }
-
-    const oilChanges = oilToday.map(item => {
-      const hasPrev = Object.prototype.hasOwnProperty.call(prevMap, item.name);
-      const prevPrice = hasPrev ? prevMap[item.name] : null;
-      let diff = null, pct = null, direction = null;
-      if (hasPrev && prevPrice !== item.price) {
-        diff = item.price - prevPrice;
-        pct = ((diff / prevPrice) * 100).toFixed(1);
-        direction = diff > 0 ? "up" : "down";
-      } else if (hasPrev) {
-        direction = "same";
-      }
-      return { ...item, prevPrice, diff, pct, direction };
-    });
-
-    // บันทึกราคาวันนี้เก็บไว้เป็นฐานสำหรับเทียบวันถัดไป
-    const existingIdx = history.findIndex(h => h.date === dateKey);
-    if (existingIdx >= 0) history[existingIdx] = { date: dateKey, prices: oilToday };
-    else history.push({ date: dateKey, prices: oilToday });
-    if (history.length > 5) history = history.slice(history.length - 5);
-
-    try {
-      await window.storage.set('oil-price-history', JSON.stringify(history), true);
-    } catch (e) {
-      console.error("save oil history failed", e);
-    }
-
-    renderOil(oilChanges, dateStr);
+    const raw = getOilPriceRawXml_();
+    Logger.log(raw);
+    SpreadsheetApp.getUi().alert(raw.substring(0, 3000)); // alert แสดงได้จำกัด ดูฉบับเต็มใน View > Logs
   } catch (e) {
-    console.error(e);
-    document.getElementById("oil-loading").innerHTML = `
-      <div class="ico">⚠️</div>
-      <span>โหลดราคาน้ำมันไม่ได้: ${e.message}</span>
-      <span style="font-size:12px;color:var(--text-dim)">ตรวจสอบว่าแท็บ "ราคาน้ำมัน" เปิด Public แล้ว</span>`;
+    SpreadsheetApp.getUi().alert("Error: " + e.message);
   }
 }
 
-function renderOil(list, dateStr) {
-  document.getElementById("oil-loading").style.display = "none";
-  const container = document.getElementById("oil-container");
-  container.style.display = "block";
-  document.getElementById("oil-date-badge").textContent = dateStr ? "วันที่ " + dateStr : todayStr();
-
-  if (list.length === 0) {
-    container.innerHTML = `<div class="state-box">
-      <div class="ico">—</div>
-      <span>ยังไม่มีข้อมูลราคาน้ำมัน</span>
-    </div>`;
-    return;
+// ดึงราคาน้ำมันวันนี้ แล้วใส่ลงตาราง: แต่ละชนิดน้ำมัน = 1 แถว (คอลัมน์ A), คอลัมน์ตามวันที่ (เหมือนชีตราคาสินค้าเดิม)
+function fetchOilPricePTT() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(OIL_CONFIG.SHEET_NAME);
+  if (!sheet) {
+    sheet = ss.insertSheet(OIL_CONFIG.SHEET_NAME);
+    sheet.getRange(OIL_CONFIG.HEADER_ROW, 1).setValue("ชื่อน้ำมัน");
+    sheet.getRange(OIL_CONFIG.HEADER_ROW, 1).setFontWeight("bold");
   }
 
-  let html = `<table>
-    <thead><tr>
-      <th>ชนิดน้ำมัน</th>
-      <th class="right">ราคาวันนี้</th>
-      <th class="right">เปลี่ยนจากเมื่อวาน</th>
-    </tr></thead><tbody>`;
+  const raw = getOilPriceRawXml_();
 
-  for (const o of list) {
-    let changeHtml = `<span style="color:var(--text-dim);font-size:12px">— ไม่มีข้อมูลเมื่อวาน</span>`;
-    if (o.direction === "up" || o.direction === "down") {
-      const sign = o.direction === "up" ? "+" : "−";
-      changeHtml = `<span class="badge ${o.direction}">${sign}${Math.abs(o.diff).toFixed(2)} ฿ (${sign}${Math.abs(o.pct)}%)</span>`;
-    } else if (o.direction === "same") {
-      changeHtml = `<span class="badge same">ไม่เปลี่ยนแปลง</span>`;
+  // ผลลัพธ์จาก SOAP ห่อ XML อีกชั้นไว้ใน <CurrentOilPriceResult>...</CurrentOilPriceResult>
+  const match = raw.match(/<CurrentOilPriceResult>([\s\S]*?)<\/CurrentOilPriceResult>/);
+  if (!match) {
+    throw new Error("ไม่พบ CurrentOilPriceResult ใน response — รัน debugOilPriceRaw_() เพื่อดูโครงสร้างจริงก่อน");
+  }
+
+  // เนื้อหาข้างในถูก HTML-encode ไว้ ต้อง decode ก่อน parse
+  const innerXml = match[1]
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'");
+
+  const doc = XmlService.parse(innerXml);
+  const root = doc.getRootElement();
+  const rows = root.getChildren(); // แต่ละแถวข้อมูล (ปกติชื่อ <Table> หรือ <FUEL>)
+
+  const items = [];
+  rows.forEach((row) => {
+    const fields = {};
+    row.getChildren().forEach((f) => {
+      fields[f.getName()] = f.getText();
+    });
+    // ชื่อ field เดาไว้ตามรูปแบบที่พบทั่วไปของ ปตท. — ถ้า debug แล้วชื่อไม่ตรง ให้เปลี่ยนตรงนี้
+    const product = fields["PRODUCT"] || fields["PName"] || fields["OilName"];
+    const price   = fields["PRICE"]   || fields["PPrice"] || fields["OilPrice"];
+    if (product && price) {
+      items.push({ product: String(product).trim(), price: price });
     }
-    html += `<tr>
-      <td><span class="prod-name">${o.name}</span></td>
-      <td class="right price-mono" style="font-weight:600">${fmt(o.price)}</td>
-      <td class="right">${changeHtml}</td>
-    </tr>`;
+  });
+
+  if (items.length === 0) {
+    throw new Error("Parse ได้ผลลัพธ์ 0 แถว — ชื่อ field ไม่ตรงตามที่เดาไว้ ต้องรัน debugOilPriceRaw_() ดู field จริงก่อน");
   }
-  html += "</tbody></table>";
-  container.innerHTML = html;
+
+  // สร้างวันที่แบบ วัน/เดือน/ปี พ.ศ. (ไม่เติมศูนย์นำหน้า) ให้ตรงรูปแบบหัวคอลัมน์ของชีตราคาสินค้าเดิม เช่น 15/7/2569
+  const now = new Date();
+  const day    = Utilities.formatDate(now, "Asia/Bangkok", "d");
+  const month  = Utilities.formatDate(now, "Asia/Bangkok", "M");
+  const yearAD = Number(Utilities.formatDate(now, "Asia/Bangkok", "yyyy"));
+  const todayStr = day + "/" + month + "/" + (yearAD + 543);
+
+  const dateCol = findOrCreateOilDateColumn_(sheet, todayStr);
+
+  items.forEach((item) => {
+    const rowIdx = findOrCreateOilProductRow_(sheet, item.product);
+    sheet.getRange(rowIdx, dateCol).setValue(item.price);
+  });
 }
 
-load();
-loadOil();
-</script>
-</body>
-</html>
+// หาคอลัมน์ของวันที่นั้นในแถวหัวตาราง (HEADER_ROW) ถ้าไม่มีให้สร้างคอลัมน์ใหม่ต่อท้าย
+function findOrCreateOilDateColumn_(sheet, dateStr) {
+  const headerRow = OIL_CONFIG.HEADER_ROW;
+  const lastCol = sheet.getLastColumn();
+  if (lastCol >= 2) {
+    const headers = sheet.getRange(headerRow, 2, 1, lastCol - 1).getValues()[0];
+    for (let i = 0; i < headers.length; i++) {
+      if (String(headers[i]).trim() === dateStr) return i + 2; // +2 เพราะเริ่มที่คอลัมน์ B
+    }
+  }
+  const newCol = lastCol < 1 ? 2 : lastCol + 1;
+  sheet.getRange(headerRow, newCol).setValue(dateStr);
+  sheet.getRange(headerRow, newCol).setFontWeight("bold");
+  return newCol;
+}
+
+// หาแถวของชนิดน้ำมันนั้นในคอลัมน์ A (เริ่มค้นจากใต้ HEADER_ROW) ถ้าไม่มีให้สร้างแถวใหม่ต่อท้าย
+function findOrCreateOilProductRow_(sheet, productName) {
+  const headerRow = OIL_CONFIG.HEADER_ROW;
+  const dataStartRow = headerRow + 1;
+  const lastRow = sheet.getLastRow();
+  if (lastRow >= dataStartRow) {
+    const names = sheet.getRange(dataStartRow, 1, lastRow - headerRow, 1).getValues();
+    for (let r = 0; r < names.length; r++) {
+      if (String(names[r][0]).trim() === productName) return r + dataStartRow;
+    }
+  }
+  const newRow = lastRow < headerRow ? dataStartRow : lastRow + 1;
+  sheet.getRange(newRow, 1).setValue(productName);
+  return newRow;
+}
+
+// ตั้ง trigger อัตโนมัติให้ดึงราคาน้ำมันทุกเช้า 07:00 (แยกจาก trigger ของราคาสินค้า)
+function setupDailyOilPriceTrigger() {
+  ScriptApp.getProjectTriggers().forEach((t) => {
+    if (t.getHandlerFunction() === "fetchOilPricePTT") ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger("fetchOilPricePTT")
+    .timeBased()
+    .everyDays(1)
+    .atHour(7)
+    .create();
+  SpreadsheetApp.getUi().alert("ตั้ง Trigger ดึงราคาน้ำมันทุกเช้า 07:00 เรียบร้อยแล้ว");
+}
+
+// ============================================================
+//  DEBUG — ตรวจสอบข้อมูลจริงในเซลล์ URL (คอลัมน์ E) ของ Row 3
+//  ใช้เพื่อวินิจฉัยว่าทำไม extractUrl_() ถึงหา URL ไม่เจอ
+// ============================================================
+function debugCellE3_() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.SHEET_NAME);
+  const cell  = sheet.getRange(3, CONFIG.COL_URL); // E3
+
+  let msg = "";
+  msg += "getValue(): " + JSON.stringify(cell.getValue()) + "\n";
+  msg += "getFormula(): " + JSON.stringify(cell.getFormula()) + "\n";
+  msg += "getDisplayValue(): " + JSON.stringify(cell.getDisplayValue()) + "\n";
+
+  const rt = cell.getRichTextValue();
+  if (rt) {
+    msg += "RichText.getText(): " + rt.getText() + "\n";
+    msg += "RichText.getLinkUrl() (ทั้งเซลล์): " + rt.getLinkUrl() + "\n";
+    const runs = rt.getRuns();
+    msg += "จำนวน runs: " + runs.length + "\n";
+    runs.forEach((run, i) => {
+      msg += "  run " + i + ": text=\"" + run.getText() + "\" link=" + run.getLinkUrl() + "\n";
+    });
+  } else {
+    msg += "RichText: null\n";
+  }
+
+  Logger.log(msg);
+  SpreadsheetApp.getUi().alert(msg);
+}
